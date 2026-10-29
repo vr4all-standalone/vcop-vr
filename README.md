@@ -35,6 +35,8 @@ Quest setup requires your owned **Revision B** media under `Download/vcop-vr/`. 
 
 For PCVR, enable the headset's OpenXR runtime, place the owned archives under the portable folder's `roms/`, and run `run-pcvr.cmd`. Settings and native NVRAM use its independent `userdata/` folder. `launch-pcvr.ps1 -RomDirectory D:/MyRoms` selects another media folder.
 
+## Controls
+
 The purple menu includes Resume, Recenter, Gun, Gun angle, Reload, Two players, Laser, Haptics, World size, Panel distance, Gun size, Wider view, View width, Game zoom, How to play, Open Service Menu and Quit. Tap/release either grip to toggle native zoom, with a brief purple status message; it starts Off each launch. The grip help leader targets the squeeze button. Native shooting/reload white strobes are hidden during VR rendering while native gun reads remain intact. In-game gun follows Rifle, Automatic, Machine Gun, Shot Gun and Magnum pickups independently for each player. Common settings follow the overseer contract. Native Gun Setting calibration remains available through the service menu. Held controls are released across focus, menu and ownership changes.
 
 Build the host with CMake/Ninja and the engine with `tools/build-engine.ps1`, supplying a dedicated source/build path without spaces. Both targets use pinned MAME 0.289 commit `f34f02505e32c1993c6a782b6814232cbfc74e36`; `tools/sync_engine_patches.py` verifies the complete cumulative patch state. `tools/build-quest.ps1` uses a separate signing key and builds the ARM64 host, engine and APK. Run `python -B -m unittest discover -s tests -v` and CTest after configuring the host. Private ROM, native-asset and capture tests run only when their own research fixtures exist.
@@ -45,11 +47,11 @@ See [validation](docs/validation.md), [design](docs/design.md), [credits](CREDIT
 
 Supply your owned vcop.zip and, unless combined in that ZIP, model1io2.zip with the I/O/LCD firmware in `Download/vcop-vr/`. Setup verifies the actual ROM lengths, CRC32 and SHA1; no game data is supplied.
 
-## Installation — Meta Quest
+## Installation (Meta Quest)
 
 Install the Quest APK, open Virtua Cop VR under Unknown Sources, and allow game-file access. The app checks the files and enters VR automatically when ready.
 
-## Installation — PC VR
+## Installation (PC VR)
 
 Extract the PCVR ZIP, enable your headset’s OpenXR runtime, place the owned archives in the portable `roms/` folder, and run the supplied PCVR launcher.
 
