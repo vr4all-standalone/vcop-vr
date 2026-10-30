@@ -5,7 +5,7 @@
 # Virtua Cop VR
 ### Sega Model 2 Arcade Light-Gun Action · Standalone Meta Quest & PC VR
 
-[![Release v0.1.6](https://img.shields.io/badge/Release-v0.1.6-brightgreen?style=for-the-badge)](https://github.com/vr4all-standalone/vcop-vr/releases/latest)
+[![Release v0.1.7](https://img.shields.io/badge/Release-v0.1.7-brightgreen?style=for-the-badge)](https://github.com/vr4all-standalone/vcop-vr/releases/latest)
 [![Quest and PC VR](https://img.shields.io/badge/Headset-Quest_3_%2F_3S_%C2%B7_PC_VR_OpenXR-blue?style=for-the-badge)](#installation-meta-quest)
 [![Original arcade game required](https://img.shields.io/badge/Your_Game-vcop%20Revision%20B%20%2B%20I%2FO%20firmware-orange?style=for-the-badge)](#your-game-files)
 
@@ -19,7 +19,7 @@
 
 ---
 
-## Update v0.1.6
+## Update v0.1.7
 
 - Shared wide VR4ALL setup panel, with validated automatic entry and manual Play.
 - Full player-colored Arcade body and grip, with original grey screws and lens details. P1 red / P2 blue follow player identity across hand swaps.
