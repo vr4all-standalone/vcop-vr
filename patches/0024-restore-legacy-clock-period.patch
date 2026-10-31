@@ -1,0 +1,12 @@
+--- a/src/devices/machine/clock.cpp
++++ b/src/devices/machine/clock.cpp
+@@ -127,7 +127,7 @@
+ 	else
+ 		m_signal ^= 1;
+ 
+-	if (m_thigh != m_tlow || m_thigh.is_zero())
+-		m_timer_tick->adjust(m_signal ? m_thigh : m_tlow);
++	if (m_thigh != m_tlow || m_thigh.is_zero() || m_timer_tick->period() != m_thigh)
++		m_timer_tick->adjust(m_signal ? m_thigh : m_tlow, 0, (m_thigh == m_tlow && !m_thigh.is_zero()) ? m_thigh : attotime::never);
+ 	output();
+ }

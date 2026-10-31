@@ -1,0 +1,21 @@
+--- a/src/mame/sega/model2_v.cpp
++++ b/src/mame/sega/model2_v.cpp
+@@ -2478,6 +2478,18 @@
+             capture.bytes("gamma",m_gamma_table,sizeof(m_gamma_table));
+             capture.bytes("workram",&m_workram[0],m_workram.bytes());
+             vcop::write_trace(*capture.finish(),std::getenv("VCOP_SCENE_DIR"));
++            if(std::getenv("VCOP_CAPTURE_FULL_SKY_PERIOD")) {
++                const int height=m_screen->visible_area().height();
++                bitmap_rgb32 sky(512,height);sky.fill(m_palette->pen(0));
++                const rectangle sky_clip(0,511,0,height-1);
++                for(int layer=3;layer>=2;--layer)m_tiles->draw_full_period(screen,sky,sky_clip,layer<<1,0,TILEMAP_DRAW_OPAQUE);
++                for(int layer=1;layer>=0;--layer)m_tiles->draw_full_period(screen,sky,sky_clip,layer<<1,0,0);
++                std::ofstream out(vcop::trace_pending_raster()/"sky.ppm",std::ios::binary);
++                out<<"P6\n512 "<<height<<"\n255\n";
++                for(int y=0;y<height;y++)for(int x=0;x<512;x++) {
++                    const uint32_t c=sky.pix(y,x);const char rgb[]={char(c>>16),char(c>>8),char(c)};out.write(rgb,3);
++                }
++            }
+         } catch(const std::exception& error){osd_printf_error("VCOP capture failed: %s\n",error.what());}
+         vcop::trace_geometry_pending()=false;
+     }

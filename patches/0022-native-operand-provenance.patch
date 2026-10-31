@@ -1,0 +1,32 @@
+--- a/src/mame/sega/model2.cpp
++++ b/src/mame/sega/model2.cpp
+@@ -168,14 +168,18 @@
+                     vcop::requested_camera_fov());
+             });
+         const bool cull_revision=vcop::camera_cull_revision_matches([&](uint32_t a){return space.read_dword(a);});
+-        if(cull_revision)for(uint32_t address:{0xb8b0u,0xb8b8u,0x320fcu,0x32104u,0x506a0u,0x506a8u}) {
++        if(cull_revision&&vcop::camera_revision_matches([&](uint32_t a){return space.read_dword(a);}))for(uint32_t address:{0xb8b0u,0xb8b8u,0x320fcu,0x32104u,0x506a0u,0x506a8u}) {
+             space.install_read_tap(address,address+3,"vcop_vr_native_submission_cone",
+                 [this,address](offs_t,u32& data,u32 mask) {
+                     const uint32_t original=data;
++                    const bool operand=m_maincpu->pc()==address&&m_maincpu->state_int(I960_PIP)==address-4;
++                    if(!operand)return;
+                     data=vcop::widened_cull_read(address,data,mask,vcop::requested_camera_fov(),
+                         vcop::camera_world_phase([&](uint32_t a){return m_maincpu->space(AS_PROGRAM).read_dword(a);}));
+                     if(data!=original&&std::getenv("VCOP_CAPTURE_FOV")) {
+-                        static unsigned samples{};if(samples++<12)osd_printf_info("VCOP native cone read %08x: %08x -> %08x\n",address,original,data);
++                        static std::array<unsigned,6> samples{};
++                        const unsigned index=address==0xb8b0?0:address==0xb8b8?1:address==0x320fc?2:address==0x32104?3:address==0x506a0?4:5;
++                        if(samples[index]++<2)osd_printf_info("VCOP native cone operand %08x PIP %08x: %08x -> %08x\n",address,unsigned(m_maincpu->state_int(I960_PIP)),original,data);
+                     }
+                 });
+         }
+@@ -184,7 +188,7 @@
+             space.install_write_tap(address,address+3,player?"vcop_p2_accepted_shot":"vcop_p1_accepted_shot",
+                 [this,player,address](offs_t,u32& data,u32 mask) {
+                     const auto state=vcop::read_game_state([&](uint32_t a){return m_maincpu->space(AS_PROGRAM).read_dword(a);});
+-                    if(vcop::accepted_shot_write(address,data,mask,state)) {
++                    if(vcop::accepted_shot_write(address,data,mask,state,m_maincpu->pc())) {
+                         vcop::accepted_shot(player);
+                         if(std::getenv("VCOP_CAPTURE_FOV"))osd_printf_info("VCOP accepted shot P%u PC %08x ammo %u\n",player+1,m_maincpu->pc(),state.players[player].ammo);
+                     }

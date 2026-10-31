@@ -1,0 +1,11 @@
+# Native adapter design
+
+The approved specification and implementation plan are in the workspace's `docs/superpowers/` folders. This is an independent VC1 port; common rendering/OpenXR/UI modules were selectively reused from accepted VC2 0.2.5. Game-specific addresses, native I/O, camera, HUD, weapons and calibration were established from original Revision B code and actual native captures.
+
+Original Model 2 uses MB86234 TGP, Sega Model 1 Audio (68000, YM3438, two MultiPCM chips), and Model1IO2 with EPR-17181 firmware. The native firmware, FPGA upload gate and dual-port RAM execute unchanged. VR input enters its real callbacks and FPGA gun reads. Calibration is UINT16 backup SRAM projected using original float arithmetic, with measured defaults P1 131/36/630/425 and P2 128/39/627/425.
+
+The mode dispatcher is at 0x5016cc, gameplay is mode 11, active submode 7. Player join, ammo, lives, equipment and service state have independent program fingerprints. Attract player activity never acknowledges a live join. Actual accepted bullet stores at 0x5b1ea8/0x5b1f08 increment feedback counters only from verified instruction PCs; empty pulls and offscreen reloads do not.
+
+Native camera producer 0x1ce30 derives focus at 0x50f404; the native GEO and hit/pickup projection both consume it. Widen only that derived focus, leaving animated FOV untouched. Three fixed CPU submission cones require six literal read taps: props/effects 22.5 degrees, actors 36 degrees. Expansion retains the actor's 13.5 degree overscan. Taps verify original camera/cull words, native world phase, exact operand PC/PIP, full reads and valid requested FOV; opcodes and unrelated reads are unchanged. `VCOP_CAPTURE_FOV` enables the same adapter in a bounded non-VR diagnostic without launching OpenXR.
+
+The host renders owned native polygons and materials before native clipping. VC1 HUD cameras use windows 4/5 and fixed focus 1200/1201; strict viewport/matrix classification keeps world aim rings separate. Proven cloud models 0x7e/0x7f use exact object/material context, render without headset translation or depth writes before opaque scenery, and are excluded from hit rays. Flat stage selection (mode11/submode2) and service use the native raster panel. Software-only distributions exclude ROMs, decoded native meshes, private captures, settings, NVRAM and keys.

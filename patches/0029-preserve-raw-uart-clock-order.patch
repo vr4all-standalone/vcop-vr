@@ -1,0 +1,97 @@
+--- a/src/mame/sega/model2.h
++++ b/src/mame/sega/model2.h
+@@ -403,8 +403,8 @@
+ 	void vcop_uart_clock_w(int state);
+ 	void restore_vcop_uart_clock();
+ 	bool m_shared_uart_clock=false;
+-    bool m_coalesced_uart_clock=false,m_uart_clock_busy=false;
+-    u64 m_uart_clock_edge=0,m_uart_clock_next=0;
++    bool m_coalesced_uart_clock=false,m_retained_uart_clock=false,m_uart_clock_busy=false;
++    u64 m_uart_clock_edge=0,m_uart_clock_next=0,m_uart_raw_edge=0;
+     emu_timer *m_uart_clock_timer=nullptr;
+     TIMER_CALLBACK_MEMBER(vcop_uart_clock_tick);
+     void vcop_uart_clock_notify(bool changed);
+--- a/src/mame/sega/model2.cpp
++++ b/src/mame/sega/model2.cpp
+@@ -2742,8 +2742,9 @@
+         m_shared_uart_clock=true;
+         // Diagnostic opt-in until native state/audio equivalence is established.
+         if(std::getenv("VCOP_COALESCED_UART")) {
+-            edge.set_clock(0);edge.set_period(attotime::never);
+-            m_coalesced_uart_clock=true;
++            // Keep this exact timer and its queue position. Only eliminate
++            // divider/idle UART work, never the original CPU slice boundaries.
++            m_coalesced_uart_clock=true;m_retained_uart_clock=true;
+         }
+     }
+ 
+@@ -7789,8 +7790,8 @@
+     if(m_shared_uart_clock)
+         machine().save().register_postload(save_prepost_delegate(FUNC(model2o_state::restore_vcop_uart_clock),this));
+     if(m_coalesced_uart_clock) {
+-        m_uart_clock_timer=timer_alloc(FUNC(model2o_state::vcop_uart_clock_tick),this);
+-        save_item(NAME(m_uart_clock_edge));save_item(NAME(m_uart_clock_next));
++        if(!m_retained_uart_clock)m_uart_clock_timer=timer_alloc(FUNC(model2o_state::vcop_uart_clock_tick),this);
++        save_item(NAME(m_uart_clock_edge));save_item(NAME(m_uart_clock_next));save_item(NAME(m_uart_raw_edge));
+         machine().save().register_presave(save_prepost_delegate(FUNC(model2o_state::vcop_uart_clock_presave),this));
+         auto notify=[this](bool changed){vcop_uart_clock_notify(changed);};
+         m_uart->set_idle_clock_notifier(notify);m_m1audio->set_uart_clock_notifier(notify);
+@@ -7805,14 +7806,36 @@
+     auto& duplicate=*subdevice<clock_device>("uart_clock");
+     duplicate.set_unscaled_clock(0);duplicate.set_period(attotime::never);
+     if(m_coalesced_uart_clock) {
+-        auto& first=*subdevice<clock_device>("m1audio:uart_clock");
+-        first.set_unscaled_clock(0);first.set_period(attotime::never);
++        if(!m_retained_uart_clock) {
++            auto& first=*subdevice<clock_device>("m1audio:uart_clock");
++            first.set_unscaled_clock(0);first.set_period(attotime::never);
++        }
+         m_uart_clock_busy=false;
+     }
+ }
+ 
+ void model2o_state::vcop_uart_clock_w(int state)
+ {
++    if(m_retained_uart_clock && !m_uart_clock_busy) {
++        const u64 edge=machine().time().as_ticks(1000000);
++        m_uart_raw_edge=edge;
++        if(!edge) {
++            // clock_device's initial low output is not a physical edge.
++            m_uart_clock_busy=true;vcop_uart_clock_w(state);m_uart_clock_busy=false;
++            return;
++        }
++        if(edge<m_uart_clock_next)return;
++        assert(edge==m_uart_clock_next);
++        m_uart_clock_busy=true;
++        const unsigned skipped=edge-m_uart_clock_edge-1;
++        const int previous=m_uart_clock_edge&1;
++        m_m1audio->skip_uart_clock_edges(skipped,previous);m_uart->skip_idle_clock_edges(skipped,previous);
++        m_uart_clock_edge=edge;
++        vcop_uart_clock_w(state);
++        m_uart_clock_busy=false;
++        schedule_vcop_uart_clock();
++        return;
++    }
+     m_m1audio->uart_clock_w(state);
+     m_uart->write_txc(state);
+     m_uart->write_rxc(state);
+@@ -7824,14 +7847,16 @@
+     const u64 next=m_uart_clock_edge+std::min(m_uart->idle_clock_deadline(level),m_m1audio->uart_clock_deadline(level));
+     if(next==m_uart_clock_next)return;
+     m_uart_clock_next=next;
+-    m_uart_clock_timer->adjust(attotime::from_ticks(next,1000000)-machine().time());
++    if(!m_retained_uart_clock)m_uart_clock_timer->adjust(attotime::from_ticks(next,1000000)-machine().time());
+ }
+ 
+ void model2o_state::vcop_uart_clock_notify(bool changed)
+ {
+-    if(m_uart_clock_busy || !m_uart_clock_timer)return;
++    if(m_uart_clock_busy || (!m_retained_uart_clock && !m_uart_clock_timer))return;
+     if(changed) { schedule_vcop_uart_clock();return; }
+-    const u64 until=std::min(machine().time().as_ticks(1000000),m_uart_clock_next-1);
++    // The last actually dispatched raw callback defines write ordering,
++    // including CPU instruction overshoot and same-timestamp timer callbacks.
++    const u64 until=std::min(m_retained_uart_clock?m_uart_raw_edge:machine().time().as_ticks(1000000),m_uart_clock_next-1);
+     if(until<=m_uart_clock_edge)return;
+     const unsigned edges=until-m_uart_clock_edge;
+     const int level=m_uart_clock_edge&1;

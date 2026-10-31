@@ -1,0 +1,58 @@
+--- a/src/mame/sega/model2.h
++++ b/src/mame/sega/model2.h
+@@ -400,11 +400,13 @@
+ 
+ protected:
+ 	virtual void machine_start() override ATTR_COLD;
++    virtual void machine_reset() override ATTR_COLD;
+ 	void vcop_uart_clock_w(int state);
+ 	void restore_vcop_uart_clock();
+ 	bool m_shared_uart_clock=false;
+     bool m_coalesced_uart_clock=false,m_retained_uart_clock=false,m_uart_clock_busy=false;
+     bool m_idle_uart_clock=false,m_uart_clock_idle=false;
++    u32 m_uart_write_generation=0;
+     bool vcop_uart_write_fence(int source,offs_t offset,u8 data);
+     TIMER_CALLBACK_MEMBER(vcop_uart_write_commit);
+     u64 m_uart_clock_edge=0,m_uart_clock_next=0,m_uart_raw_edge=0;
+--- a/src/mame/sega/model2.cpp
++++ b/src/mame/sega/model2.cpp
+@@ -7799,7 +7799,7 @@
+         auto notify=[this](bool changed){vcop_uart_clock_notify(changed);};
+         m_uart->set_idle_clock_notifier(notify);m_m1audio->set_uart_clock_notifier(notify);
+         if(m_idle_uart_clock) {
+-            save_item(NAME(m_uart_clock_idle));
++            save_item(NAME(m_uart_clock_idle));save_item(NAME(m_uart_write_generation));
+             m_uart->set_write_fence([this](offs_t offset,u8 data){return vcop_uart_write_fence(0,offset,data);});
+             m_m1audio->set_uart_write_fence([this](offs_t offset,u8 data){return vcop_uart_write_fence(1,offset,data);});
+         }
+@@ -7901,13 +7901,14 @@
+     if(!m_idle_uart_clock || !m_uart_clock_idle || m_uart_clock_busy)return false;
+     // Leave device state untouched until all earlier timestamped events have
+     // run. synchronize aborts the guest slice; internal pin callbacks stay raw.
+-    const int transaction=(source<<9)|((offset?1:0)<<8)|data;
++    const int transaction=(m_uart_write_generation<<10)|(source<<9)|((offset?1:0)<<8)|data;
+     machine().scheduler().synchronize(timer_expired_delegate(FUNC(model2o_state::vcop_uart_write_commit),this),transaction);
+     return true;
+ }
+ 
+ TIMER_CALLBACK_MEMBER(model2o_state::vcop_uart_write_commit)
+ {
++    if((u32(param)>>10)!=m_uart_write_generation)return;
+     vcop_uart_clock_notify(false);
+     m_uart_clock_idle=false;
+     m_uart_clock_busy=true;
+@@ -7917,3 +7918,14 @@
+     // Resume on the existing global edge phase, never on now + 1us.
+     schedule_vcop_uart_clock();
+ }
++
++void model2o_state::machine_reset()
++{
++    // Anonymous synchronized writes must never outlive the reset that issued
++    // them. Keep the native UART registers/latch reset behavior untouched.
++    m_uart_write_generation=(m_uart_write_generation+1)&0x1fffff;
++    if(m_idle_uart_clock && m_uart_clock_timer)vcop_uart_clock_notify(false);
++    m_uart_clock_idle=false;
++    model2_tgp_state::machine_reset();
++    if(m_idle_uart_clock && m_uart_clock_timer)schedule_vcop_uart_clock();
++}

@@ -1,0 +1,232 @@
+{
+  "set": "vcop",
+  "revision": "B",
+  "files": [
+    {
+      "name": "epr-17166b.12",
+      "size": 131072,
+      "crc32": "a5647c59",
+      "sha1": "0a9e0be447d3591e82efd40ef4acbfe7ae211579",
+      "group": "maincpu",
+      "offset": "0"
+    },
+    {
+      "name": "epr-17167b.13",
+      "size": 131072,
+      "crc32": "f5dde26a",
+      "sha1": "95db029bc4206a44ea216afbcd1c19689f79115a",
+      "group": "maincpu",
+      "offset": "2"
+    },
+    {
+      "name": "epr-17160a.14",
+      "size": 131072,
+      "crc32": "267f3242",
+      "sha1": "40ec09cda984bb80969bfae2278432153137c213",
+      "group": "maincpu",
+      "offset": "40000"
+    },
+    {
+      "name": "epr-17161a.15",
+      "size": 131072,
+      "crc32": "f7126876",
+      "sha1": "b0ceb1206edaa507ec15723497fcd447a511f423",
+      "group": "maincpu",
+      "offset": "40002"
+    },
+    {
+      "name": "mpr-17164.10",
+      "size": 2097152,
+      "crc32": "ac5fc501",
+      "sha1": "e60deec1e79d207d37d3f4ddd83a1b2125c411ac",
+      "group": "main_data",
+      "offset": "0"
+    },
+    {
+      "name": "mpr-17165.11",
+      "size": 2097152,
+      "crc32": "82296d00",
+      "sha1": "23327137b36c98dfb9175ea9d36478e7385dfac2",
+      "group": "main_data",
+      "offset": "2"
+    },
+    {
+      "name": "mpr-17162.8",
+      "size": 2097152,
+      "crc32": "60ddd41e",
+      "sha1": "0894c9bcdedeb09f921419a309858e242cb8db3a",
+      "group": "main_data",
+      "offset": "400000"
+    },
+    {
+      "name": "mpr-17163.9",
+      "size": 2097152,
+      "crc32": "8c1f9dc8",
+      "sha1": "cf99a5bb4f343d59c8d6f5716287b6e16bef6412",
+      "group": "main_data",
+      "offset": "400002"
+    },
+    {
+      "name": "epr-17168a.6",
+      "size": 524288,
+      "crc32": "59091a37",
+      "sha1": "14591c7015aaf126755be584aa94c04e6de222fa",
+      "group": "main_data",
+      "offset": "800000"
+    },
+    {
+      "name": "epr-17169a.7",
+      "size": 524288,
+      "crc32": "0495808d",
+      "sha1": "5b86a9a68c2b52f942aa8d858ee7a491f546a921",
+      "group": "main_data",
+      "offset": "800002"
+    },
+    {
+      "name": "mpr-17159.16",
+      "size": 2097152,
+      "crc32": "e218727d",
+      "sha1": "1458d01d49936a0b8d497b62ff9ea940ca753b37",
+      "group": "polygons",
+      "offset": "0"
+    },
+    {
+      "name": "mpr-17156.20",
+      "size": 2097152,
+      "crc32": "c4f4aabf",
+      "sha1": "8814cd329609cc8a188fedd770230bb9a5d00361",
+      "group": "polygons",
+      "offset": "2"
+    },
+    {
+      "name": "mpr-17158.25",
+      "size": 2097152,
+      "crc32": "1108d1ec",
+      "sha1": "e95d4166bd4b26c5f21b85821b410f53045f4309",
+      "group": "textures",
+      "offset": "0"
+    },
+    {
+      "name": "mpr-17157.24",
+      "size": 2097152,
+      "crc32": "cf31e33d",
+      "sha1": "0cb62d4f28b5ad8a7e4c82b0ca8aea3037b05455",
+      "group": "textures",
+      "offset": "2"
+    },
+    {
+      "name": "epr-17170.7",
+      "size": 131072,
+      "crc32": "06a38ae2",
+      "sha1": "a2c3d14d9266449ebfc6d976a956e0a8a602cfb0",
+      "group": "m1audio:sndcpu",
+      "offset": "0"
+    },
+    {
+      "name": "epr-17171.8",
+      "size": 131072,
+      "crc32": "b5e436f8",
+      "sha1": "1da3cb52d64f52d03a8de9954afffbc6e1549a5b",
+      "group": "m1audio:sndcpu",
+      "offset": "20000"
+    },
+    {
+      "name": "mpr-17172.32",
+      "size": 1048576,
+      "crc32": "ab22cac3",
+      "sha1": "0e872158faeb8c0404b10cdf0a3fa36f89a5093e",
+      "group": "m1audio:pcm1",
+      "offset": "0"
+    },
+    {
+      "name": "mpr-17173.33",
+      "size": 1048576,
+      "crc32": "3cb4005c",
+      "sha1": "a56f436ea6dfe0968b73ae7bc92bb2f4c612460d",
+      "group": "m1audio:pcm1",
+      "offset": "200000"
+    },
+    {
+      "name": "mpr-17174.4",
+      "size": 2097152,
+      "crc32": "a50369cc",
+      "sha1": "69807157baf6e3679adc95633c82b0236db01247",
+      "group": "m1audio:pcm2",
+      "offset": "0"
+    },
+    {
+      "name": "mpr-17175.5",
+      "size": 2097152,
+      "crc32": "9136d43c",
+      "sha1": "741f80a8ff8165ffe171dc568e0da4ad0bde4809",
+      "group": "m1audio:pcm2",
+      "offset": "200000"
+    },
+    {
+      "name": "opr-14742a.45",
+      "size": 131072,
+      "crc32": "90c6b117",
+      "sha1": "f46429fffcee17d056f56d5fe035a33f1fd6c27e",
+      "group": "copro_tgp_tables",
+      "offset": "0"
+    },
+    {
+      "name": "opr-14743a.46",
+      "size": 131072,
+      "crc32": "ae7f446b",
+      "sha1": "5b9f1fc47caf21e061e930c0d72804e4ec8c7bca",
+      "group": "copro_tgp_tables",
+      "offset": "2"
+    },
+    {
+      "name": "opr-14744.58",
+      "size": 131072,
+      "crc32": "730ea9e0",
+      "sha1": "651f1db4089a400d073b19ada299b4b08b08f372",
+      "group": "other_data",
+      "offset": "0"
+    },
+    {
+      "name": "opr-14745.59",
+      "size": 131072,
+      "crc32": "4c934d96",
+      "sha1": "e3349ece0e47f684d61ad11bfea4a90602287350",
+      "group": "other_data",
+      "offset": "2"
+    },
+    {
+      "name": "opr-14746.62",
+      "size": 131072,
+      "crc32": "2a266cbd",
+      "sha1": "34e047a93459406c22acf4c25089d1a4955f94ca",
+      "group": "other_data",
+      "offset": "40000"
+    },
+    {
+      "name": "opr-14747.63",
+      "size": 131072,
+      "crc32": "a4ad5e19",
+      "sha1": "7d7ec300eeb9a8de1590011e37108688c092f329",
+      "group": "other_data",
+      "offset": "40002"
+    },
+    {
+      "name": "epr-17181.6",
+      "size": 65536,
+      "crc32": "1add2b82",
+      "sha1": "81892251d466f630a96af25bde652c20e47d7ede",
+      "group": "ioboard",
+      "status": "good"
+    },
+    {
+      "name": "hd44780_a00.bin",
+      "size": 4096,
+      "crc32": "e459877c",
+      "sha1": "65cf075a988cdcbb316b9afdd0529b374a1a65ec",
+      "group": "lcd",
+      "status": "baddump"
+    }
+  ],
+  "hardware": "Model 2",
+  "commit": "f34f02505e32c1993c6a782b6814232cbfc74e36"
+}

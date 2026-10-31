@@ -1,0 +1,16 @@
+--- a/src/emu/schedule.cpp
++++ b/src/emu/schedule.cpp
+@@ -247,6 +247,13 @@
+ 	// advance by one period
+ 	m_start = m_expire;
+ 	m_expire += m_period;
++
++	// Keeping this node in place is equivalent only when re-insertion
++	// would choose the same gap. Strict successor comparison preserves
++	// FIFO ordering for callbacks that share an expiration timestamp.
++	if (m_enabled && !m_expire.is_never() && m_next &&
++		m_next->m_expire > m_expire && (!m_prev || m_prev->m_expire <= m_expire))
++		return;
+ 
+ 	// remove and re-insert us
+ 	m_scheduler->timer_list_remove(*this);

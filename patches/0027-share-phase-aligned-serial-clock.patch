@@ -1,0 +1,92 @@
+--- a/src/mame/shared/segam1audio.h
++++ b/src/mame/shared/segam1audio.h
+@@ -33,6 +33,7 @@
+ 	void m1_snd_mpcm_bnk2_w(uint16_t data);
+ 
+ 	void write_txd(int state);
++	void uart_clock_w(int state);
+ 
+ 	void mpcm1_map(address_map &map) ATTR_COLD;
+ 	void mpcm2_map(address_map &map) ATTR_COLD;
+--- a/src/mame/shared/segam1audio.cpp
++++ b/src/mame/shared/segam1audio.cpp
+@@ -145,3 +145,10 @@
+ {
+ 	m_rxd_handler(state);
+ }
++
++// The original two phase-aligned board clocks can share one edge source.
++void segam1audio_device::uart_clock_w(int state)
++{
++    m_uart->write_txc(state);
++    m_uart->write_rxc(state);
++}
+--- a/src/mame/sega/model2.h
++++ b/src/mame/sega/model2.h
+@@ -399,6 +399,10 @@
+ 	void vcop(machine_config &config) ATTR_COLD;
+ 
+ protected:
++	virtual void machine_start() override ATTR_COLD;
++	void vcop_uart_clock_w(int state);
++	void restore_vcop_uart_clock();
++	bool m_shared_uart_clock=false;
+ 	void daytona_output_w(u8 data);
+ 	void desert_output_w(u8 data);
+ 	void vcop_output_w(u8 data);
+--- a/src/mame/sega/model2.cpp
++++ b/src/mame/sega/model2.cpp
+@@ -2732,6 +2732,16 @@
+ void model2o_state::vcop(machine_config &config)
+ {
+ 	model2o(config);
++    if(!std::getenv("VCOP_LEGACY_SERIAL_CLOCK")) {
++        // Both original 500kHz oscillators have identical phase and duty.
++        // Preserve their edge order using the first (sound-board) clock.
++        auto& edge=*subdevice<clock_device>("m1audio:uart_clock");
++        edge.signal_handler().set(*this,FUNC(model2o_state::vcop_uart_clock_w));
++        auto& duplicate=*subdevice<clock_device>("uart_clock");
++        duplicate.set_clock(0);duplicate.set_period(attotime::never);
++        m_shared_uart_clock=true;
++    }
++
+ 
+ 	model1io2_device &ioboard(SEGA_MODEL1IO2(config.replace(), "ioboard", 0));
+ 	ioboard.set_default_bios_tag("epr17181");
+@@ -7767,3 +7777,25 @@
+ GAME( 1997, topskatruo, topskatr, topskatr,     topskatr,  model2c_state, empty_init,    ROT0, "Sega",   "Top Skater (USA)", MACHINE_NOT_WORKING )
+ GAME( 1997, topskatrj,  topskatr, topskatr,     topskatr,  model2c_state, empty_init,    ROT0, "Sega",   "Top Skater (Japan)", MACHINE_NOT_WORKING )
+ GAME( 1998, dynamcopc,  dynamcop, model2c_5881, dynamcop,  model2c_state, empty_init,    ROT0, "Sega",   "Dynamite Cop (USA, Model 2C)", MACHINE_NOT_WORKING )
++
++void model2o_state::machine_start()
++{
++    model2_tgp_state::machine_start();
++    if(m_shared_uart_clock)
++        machine().save().register_postload(save_prepost_delegate(FUNC(model2o_state::restore_vcop_uart_clock),this));
++}
++
++void model2o_state::restore_vcop_uart_clock()
++{
++    // Older saved states contain an active duplicate clock. Keep its saved
++    // device layout while ensuring only the shared edge source runs.
++    auto& duplicate=*subdevice<clock_device>("uart_clock");
++    duplicate.set_unscaled_clock(0);duplicate.set_period(attotime::never);
++}
++
++void model2o_state::vcop_uart_clock_w(int state)
++{
++    m_m1audio->uart_clock_w(state);
++    m_uart->write_txc(state);
++    m_uart->write_rxc(state);
++}
+--- a/src/devices/cpu/i960/i960.cpp
++++ b/src/devices/cpu/i960/i960.cpp
+@@ -2215,7 +2215,7 @@
+ 		check_immediate_irqs();
+ 
+ 	while(m_icount > 0) {
+-        if(vcop::fold_idle_poll(m_vcop_idle_poll,debugger_enabled(),m_stall_state.burst_mode,m_IP,m_PIP,m_r,m_AC,m_icount,
++        if(m_IP==0x9124 && m_vcop_idle_poll && m_icount>=10 && vcop::fold_idle_poll(true,debugger_enabled(),m_stall_state.burst_mode,m_IP,m_PIP,m_r,m_AC,m_icount,
+                 [this](uint32_t address){return i960_read_dword_unaligned(address);})) {
+             m_stalled=false;
+             continue;

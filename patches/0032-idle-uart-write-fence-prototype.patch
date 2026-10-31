@@ -1,0 +1,172 @@
+--- a/src/devices/machine/i8251.h
++++ b/src/devices/machine/i8251.h
+@@ -42,6 +42,8 @@
+ 	// Optional external oscillator coordinator; default pin-clock path is unchanged.
+     void set_idle_clock_notifier(std::function<void(bool)> notify) { m_idle_clock_notify=std::move(notify); }
+     unsigned idle_clock_deadline(int level) const;
++    bool clock_is_idle(int level) const;
++    void set_write_fence(std::function<bool(offs_t,uint8_t)> fence) { m_write_fence=std::move(fence); }
+     void skip_idle_clock_edges(unsigned edges,int level);
+ 	void write_rxd(int state);
+ 	void write_cts(int state);
+@@ -99,6 +101,7 @@
+ 
+ private:
+ 	std::function<void(bool)> m_idle_clock_notify;
++    std::function<bool(offs_t,uint8_t)> m_write_fence;
+ 	devcb_write_line m_txd_handler;
+ 	devcb_write_line m_dtr_handler;
+ 	devcb_write_line m_rts_handler;
+--- a/src/devices/machine/i8251.cpp
++++ b/src/devices/machine/i8251.cpp
+@@ -19,6 +19,8 @@
+ 
+ #include "emu.h"
+ #include "i8251.h"
++#include <cstdlib>
++#include <cstdio>
+ 
+ #include <bit>
+ 
+@@ -409,6 +411,8 @@
+ 	if (!is_transmit_register_empty())
+ 	{
+ 		uint8_t data = transmit_register_get_data_bit();
++        static const bool trace=std::getenv("VCOP_UART_TRACE");
++        if(trace)std::fprintf(stderr,"UART_TRACE %s %llu TX %02x\n",tag(),(unsigned long long)machine().time().as_ticks(1000000000),data);
+ 		LOGBITS("8251: Tx Present a %d\n", data);
+ 		m_txd_handler(data);
+ 	}
+@@ -821,6 +825,8 @@
+ 
+ void i8251_device::receive_character(uint8_t ch)
+ {
++    static const bool trace=std::getenv("VCOP_UART_TRACE");
++    if(trace)std::fprintf(stderr,"UART_TRACE %s %llu RX %02x\n",tag(),(unsigned long long)machine().time().as_ticks(1000000000),ch);
+ 	LOG("receive_character %02x\n", ch);
+ 
+ 	m_rx_data = ch;
+@@ -871,6 +877,7 @@
+ 
+ void i8251_device::write(offs_t offset, uint8_t data)
+ {
++    if(m_write_fence && m_write_fence(offset,data))return;
+ 	if (offset)
+ 		control_w(data);
+ 	else
+@@ -1048,3 +1055,13 @@
+     }
+     m_txc=m_rxc=level^(edges&1);
+ }
++
++bool i8251_device::clock_is_idle(int level) const
++{
++    return idle_clock_deadline(level)>1 && !m_delayed_tx_en && !BIT(m_command,3) &&
++        is_tx_enabled() && BIT(m_command,2) &&
++        (m_status&(I8251_STATUS_TX_READY|I8251_STATUS_TX_EMPTY|I8251_STATUS_RX_READY))==
++            (I8251_STATUS_TX_READY|I8251_STATUS_TX_EMPTY) &&
++        is_transmit_register_empty() && !is_receive_register_synchronized() &&
++        !is_receive_register_full() && m_rxd;
++}
+--- a/src/mame/shared/segam1audio.h
++++ b/src/mame/shared/segam1audio.h
+@@ -35,6 +35,9 @@
+ 	void write_txd(int state);
+ 	void uart_clock_w(int state);
+     void set_uart_clock_notifier(std::function<void(bool)> notify) { m_uart->set_idle_clock_notifier(std::move(notify)); }
++    bool uart_clock_is_idle(int level) const { return m_uart->clock_is_idle(level); }
++    void set_uart_write_fence(std::function<bool(offs_t,uint8_t)> fence) { m_uart->set_write_fence(std::move(fence)); }
++    void uart_write(offs_t offset,uint8_t data) { m_uart->write(offset,data); }
+     unsigned uart_clock_deadline(int level) const { return m_uart->idle_clock_deadline(level); }
+     void skip_uart_clock_edges(unsigned edges,int level) { m_uart->skip_idle_clock_edges(edges,level); }
+ 
+--- a/src/mame/sega/model2.h
++++ b/src/mame/sega/model2.h
+@@ -404,6 +404,9 @@
+ 	void restore_vcop_uart_clock();
+ 	bool m_shared_uart_clock=false;
+     bool m_coalesced_uart_clock=false,m_retained_uart_clock=false,m_uart_clock_busy=false;
++    bool m_idle_uart_clock=false,m_uart_clock_idle=false;
++    bool vcop_uart_write_fence(int source,offs_t offset,u8 data);
++    TIMER_CALLBACK_MEMBER(vcop_uart_write_commit);
+     u64 m_uart_clock_edge=0,m_uart_clock_next=0,m_uart_raw_edge=0;
+     emu_timer *m_uart_clock_timer=nullptr;
+     TIMER_CALLBACK_MEMBER(vcop_uart_clock_tick);
+--- a/src/mame/sega/model2.cpp
++++ b/src/mame/sega/model2.cpp
+@@ -2741,7 +2741,10 @@
+         duplicate.set_clock(0);duplicate.set_period(attotime::never);
+         m_shared_uart_clock=true;
+         // Diagnostic opt-in until native state/audio equivalence is established.
+-        if(std::getenv("VCOP_COALESCED_UART")) {
++        if(std::getenv("VCOP_IDLE_UART")) {
++            edge.set_clock(0);edge.set_period(attotime::never);
++            m_coalesced_uart_clock=true;m_idle_uart_clock=true;
++        } else if(std::getenv("VCOP_COALESCED_UART")) {
+             // Keep this exact timer and its queue position. Only eliminate
+             // divider/idle UART work, never the original CPU slice boundaries.
+             m_coalesced_uart_clock=true;m_retained_uart_clock=true;
+@@ -7795,6 +7798,11 @@
+         machine().save().register_presave(save_prepost_delegate(FUNC(model2o_state::vcop_uart_clock_presave),this));
+         auto notify=[this](bool changed){vcop_uart_clock_notify(changed);};
+         m_uart->set_idle_clock_notifier(notify);m_m1audio->set_uart_clock_notifier(notify);
++        if(m_idle_uart_clock) {
++            save_item(NAME(m_uart_clock_idle));
++            m_uart->set_write_fence([this](offs_t offset,u8 data){return vcop_uart_write_fence(0,offset,data);});
++            m_m1audio->set_uart_write_fence([this](offs_t offset,u8 data){return vcop_uart_write_fence(1,offset,data);});
++        }
+         schedule_vcop_uart_clock();
+     }
+ }
+@@ -7844,7 +7852,8 @@
+ void model2o_state::schedule_vcop_uart_clock()
+ {
+     const int level=m_uart_clock_edge&1;
+-    const u64 next=m_uart_clock_edge+std::min(m_uart->idle_clock_deadline(level),m_m1audio->uart_clock_deadline(level));
++    const unsigned interval=m_idle_uart_clock&&!m_uart_clock_idle?1:std::min(m_uart->idle_clock_deadline(level),m_m1audio->uart_clock_deadline(level));
++    const u64 next=m_uart_clock_edge+interval;
+     if(next==m_uart_clock_next)return;
+     m_uart_clock_next=next;
+     if(!m_retained_uart_clock)m_uart_clock_timer->adjust(attotime::from_ticks(next,1000000)-machine().time());
+@@ -7853,7 +7862,10 @@
+ void model2o_state::vcop_uart_clock_notify(bool changed)
+ {
+     if(m_uart_clock_busy || (!m_retained_uart_clock && !m_uart_clock_timer))return;
+-    if(changed) { schedule_vcop_uart_clock();return; }
++    if(changed) {
++        if(m_idle_uart_clock)m_uart_clock_idle=false;
++        schedule_vcop_uart_clock();return;
++    }
+     // The last actually dispatched raw callback defines write ordering,
+     // including CPU instruction overshoot and same-timestamp timer callbacks.
+     const u64 until=std::min(m_retained_uart_clock?m_uart_raw_edge:machine().time().as_ticks(1000000),m_uart_clock_next-1);
+@@ -7879,5 +7891,29 @@
+     m_uart_clock_edge=event;
+     vcop_uart_clock_w(event&1);
+     m_uart_clock_busy=false;
++    // Only a completed real edge may authorize skipping idle pulses.
++    if(m_idle_uart_clock)m_uart_clock_idle=m_uart->clock_is_idle(event&1)&&m_m1audio->uart_clock_is_idle(event&1);
+     schedule_vcop_uart_clock();
+ }
++
++bool model2o_state::vcop_uart_write_fence(int source,offs_t offset,u8 data)
++{
++    if(!m_idle_uart_clock || !m_uart_clock_idle || m_uart_clock_busy)return false;
++    // Leave device state untouched until all earlier timestamped events have
++    // run. synchronize aborts the guest slice; internal pin callbacks stay raw.
++    const int transaction=(source<<9)|((offset?1:0)<<8)|data;
++    machine().scheduler().synchronize(timer_expired_delegate(FUNC(model2o_state::vcop_uart_write_commit),this),transaction);
++    return true;
++}
++
++TIMER_CALLBACK_MEMBER(model2o_state::vcop_uart_write_commit)
++{
++    vcop_uart_clock_notify(false);
++    m_uart_clock_idle=false;
++    m_uart_clock_busy=true;
++    if(param&0x200)m_m1audio->uart_write((param>>8)&1,param&0xff);
++    else m_uart->write((param>>8)&1,param&0xff);
++    m_uart_clock_busy=false;
++    // Resume on the existing global edge phase, never on now + 1us.
++    schedule_vcop_uart_clock();
++}

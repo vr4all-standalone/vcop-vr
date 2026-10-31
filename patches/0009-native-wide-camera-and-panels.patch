@@ -1,0 +1,19 @@
+--- a/src/mame/sega/model2_v.cpp
++++ b/src/mame/sega/model2_v.cpp
+@@ -2498,14 +2498,14 @@
+         capture.bytes("luma",m_lumaram.get(),0x8000);
+         capture.bytes("gamma",m_gamma_table,sizeof(m_gamma_table));
+         auto frame=std::make_unique<vcop::NativeFrame>(capture.take());
+-        frame->complete=false;frame->raster_only=m_render_test_mode;
++        frame->complete=false;frame->raster_only=m_render_test_mode||vcop::native_panel_requested();
+         vcop::copy_pixels(frame->background,width,height,[&](int x,int y){return bitmap.pix(y,x);});
+         vcop::live_raster()=std::move(frame);vcop::live_pending()=false;
+     }
+ 	/* tell the rasterizer we're starting a frame */
+ 	if (m_render_test_mode == true)
+ 		draw_framebuffer(bitmap, cliprect);
+-	else if(!vcop::vr_requested() || std::getenv("VCOP_CPU_RASTER") || std::getenv("VCOP_SCENE_DIR"))
++	else if(!vcop::vr_requested() || std::getenv("VCOP_CPU_RASTER") || std::getenv("VCOP_SCENE_DIR") || vcop::native_panel_requested())
+         // The VR host replays owned polygons. Retain the software rasterizer
+         // for reference diagnostics; it does not participate in game logic.
+ 		render_polygons(bitmap, cliprect);

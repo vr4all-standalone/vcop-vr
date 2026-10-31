@@ -1,0 +1,84 @@
+--- a/src/emu/diexec.h
++++ b/src/emu/diexec.h
+@@ -323,7 +323,6 @@
+ 	// clock and timing information
+ 	u64                     m_totalcycles;              // total device cycles executed
+ 	attotime                m_localtime;                // local time, relative to the timer system's global time
+-	u64                     m_divreciprocal;           // exact quotient cache, derived on clock changes
+ 	s32                     m_divisor;                  // 32-bit attoseconds_per_cycle divisor
+ 	u8                      m_divshift;                 // right shift amount to fit the divisor into 32 bits
+ 	u32                     m_cycles_per_second;        // cycles per second, adjusted for multipliers
+--- a/src/emu/diexec.cpp
++++ b/src/emu/diexec.cpp
+@@ -11,8 +11,6 @@
+ #include "emu.h"
+ #include "debugger.h"
+ #include "screen.h"
+-#include "vcop/cycle_divider.h"
+-#include <cstdlib>
+ 
+ #include <cstdio>
+ 
+@@ -68,7 +66,6 @@
+ 	, m_trigger(0)
+ 	, m_inttrigger(0)
+ 	, m_totalcycles(0)
+-	, m_divreciprocal(0)
+ 	, m_divisor(0)
+ 	, m_divshift(0)
+ 	, m_cycles_per_second(0)
+@@ -494,7 +491,6 @@
+ 		attos >>= 1;
+ 	}
+ 	m_divisor = attos;
+-	m_divreciprocal = m_divisor && !std::getenv("VCOP_LEGACY_CYCLE_DIVIDER") ? vcop::cycle_reciprocal(m_divisor) : 0;
+ 
+ 	// re-compute the perfect interleave factor
+ 	m_scheduler->compute_perfect_interleave();
+--- a/src/emu/schedule.cpp
++++ b/src/emu/schedule.cpp
+@@ -9,7 +9,6 @@
+ ***************************************************************************/
+ 
+ #include "emu.h"
+-#include "vcop/cycle_divider.h"
+ #include "debugger.h"
+ 
+ //**************************************************************************
+@@ -247,13 +246,6 @@
+ 	// advance by one period
+ 	m_start = m_expire;
+ 	m_expire += m_period;
+-
+-	// Keeping this node in place is equivalent only when re-insertion
+-	// would choose the same gap. Strict successor comparison preserves
+-	// FIFO ordering for callbacks that share an expiration timestamp.
+-	if (m_enabled && !m_expire.is_never() && m_next &&
+-		m_next->m_expire > m_expire && (!m_prev || m_prev->m_expire <= m_expire))
+-		return;
+ 
+ 	// remove and re-insert us
+ 	m_scheduler->timer_list_remove(*this);
+@@ -448,7 +440,7 @@
+ 				else if (delta >= exec->m_attoseconds_per_cycle)
+ 				{
+ 					// compute how many cycles we want to execute
+-					int ran = exec->m_cycles_running = vcop::cycle_quotient(u64(delta) >> exec->m_divshift, exec->m_divisor, exec->m_divreciprocal, [](u64 a,u64 b) { u64 high; mulu_64x64(a,b,high); return high; });
++					int ran = exec->m_cycles_running = divu_64x32(u64(delta) >> exec->m_divshift, exec->m_divisor);
+ 					LOG("  cpu '%s': %d (%d cycles)\n", exec->device().tag(), delta, exec->m_cycles_running);
+ 
+ 					// if we're not suspended, actually execute
+--- a/src/mame/sega/model2.cpp
++++ b/src/mame/sega/model2.cpp
+@@ -2740,8 +2740,9 @@
+         auto& duplicate=*subdevice<clock_device>("uart_clock");
+         duplicate.set_clock(0);duplicate.set_period(attotime::never);
+         m_shared_uart_clock=true;
+-        // Diagnostic opt-in until native state/audio equivalence is established.
+-        if(std::getenv("VCOP_IDLE_UART")) {
++        // Keep all active serial traffic on the original global 1us grid.
++        // The raw source remains available for controlled cold-boot comparisons.
++        if(!std::getenv("VCOP_RAW_UART") && !std::getenv("VCOP_COALESCED_UART")) {
+             edge.set_clock(0);edge.set_period(attotime::never);
+             m_coalesced_uart_clock=true;m_idle_uart_clock=true;
+         } else if(std::getenv("VCOP_COALESCED_UART")) {

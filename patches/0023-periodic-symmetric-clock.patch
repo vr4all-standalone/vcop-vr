@@ -1,0 +1,25 @@
+--- a/src/devices/machine/clock.cpp
++++ b/src/devices/machine/clock.cpp
+@@ -112,9 +112,10 @@
+ 		}
+ 	}
+ 
+-	attotime next = m_signal ? m_thigh : m_tlow;
+-	if (next < m_timer_tick->remaining())
+-		m_timer_tick->adjust(next);
++	attotime next = std::min(m_signal ? m_thigh : m_tlow, m_timer_tick->remaining());
++	// Preserve every edge and its phase. Symmetric clocks can let the
++	// scheduler advance the periodic timer instead of rearming at each edge.
++	m_timer_tick->adjust(next, 0, (m_thigh == m_tlow && !m_thigh.is_zero()) ? m_thigh : attotime::never);
+ }
+ 
+ TIMER_CALLBACK_MEMBER(clock_device::clock_tick)
+@@ -126,6 +127,7 @@
+ 	else
+ 		m_signal ^= 1;
+ 
+-	m_timer_tick->adjust(m_signal ? m_thigh : m_tlow);
++	if (m_thigh != m_tlow || m_thigh.is_zero())
++		m_timer_tick->adjust(m_signal ? m_thigh : m_tlow);
+ 	output();
+ }

@@ -1,0 +1,56 @@
+--- a/src/emu/diexec.h
++++ b/src/emu/diexec.h
+@@ -323,6 +323,7 @@
+ 	// clock and timing information
+ 	u64                     m_totalcycles;              // total device cycles executed
+ 	attotime                m_localtime;                // local time, relative to the timer system's global time
++	u64                     m_divreciprocal;           // exact quotient cache, derived on clock changes
+ 	s32                     m_divisor;                  // 32-bit attoseconds_per_cycle divisor
+ 	u8                      m_divshift;                 // right shift amount to fit the divisor into 32 bits
+ 	u32                     m_cycles_per_second;        // cycles per second, adjusted for multipliers
+--- a/src/emu/diexec.cpp
++++ b/src/emu/diexec.cpp
+@@ -11,6 +11,8 @@
+ #include "emu.h"
+ #include "debugger.h"
+ #include "screen.h"
++#include "vcop/cycle_divider.h"
++#include <cstdlib>
+ 
+ #include <cstdio>
+ 
+@@ -66,6 +68,7 @@
+ 	, m_trigger(0)
+ 	, m_inttrigger(0)
+ 	, m_totalcycles(0)
++	, m_divreciprocal(0)
+ 	, m_divisor(0)
+ 	, m_divshift(0)
+ 	, m_cycles_per_second(0)
+@@ -491,6 +494,7 @@
+ 		attos >>= 1;
+ 	}
+ 	m_divisor = attos;
++	m_divreciprocal = m_divisor && !std::getenv("VCOP_LEGACY_CYCLE_DIVIDER") ? vcop::cycle_reciprocal(m_divisor) : 0;
+ 
+ 	// re-compute the perfect interleave factor
+ 	m_scheduler->compute_perfect_interleave();
+--- a/src/emu/schedule.cpp
++++ b/src/emu/schedule.cpp
+@@ -9,6 +9,7 @@
+ ***************************************************************************/
+ 
+ #include "emu.h"
++#include "vcop/cycle_divider.h"
+ #include "debugger.h"
+ 
+ //**************************************************************************
+@@ -440,7 +441,7 @@
+ 				else if (delta >= exec->m_attoseconds_per_cycle)
+ 				{
+ 					// compute how many cycles we want to execute
+-					int ran = exec->m_cycles_running = divu_64x32(u64(delta) >> exec->m_divshift, exec->m_divisor);
++					int ran = exec->m_cycles_running = vcop::cycle_quotient(u64(delta) >> exec->m_divshift, exec->m_divisor, exec->m_divreciprocal, [](u64 a,u64 b) { u64 high; mulu_64x64(a,b,high); return high; });
+ 					LOG("  cpu '%s': %d (%d cycles)\n", exec->device().tag(), delta, exec->m_cycles_running);
+ 
+ 					// if we're not suspended, actually execute

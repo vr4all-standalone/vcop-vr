@@ -1,0 +1,278 @@
+--- a/src/devices/machine/i8251.h
++++ b/src/devices/machine/i8251.h
+@@ -14,6 +14,7 @@
+ #pragma once
+ 
+ #include "diserial.h"
++#include <functional>
+ 
+ class i8251_device : public device_t, public device_serial_interface
+ {
+@@ -38,6 +39,10 @@
+ 	virtual uint8_t read(offs_t offset);
+ 	virtual void write(offs_t offset, uint8_t data);
+ 
++	// Optional external oscillator coordinator; default pin-clock path is unchanged.
++    void set_idle_clock_notifier(std::function<void(bool)> notify) { m_idle_clock_notify=std::move(notify); }
++    unsigned idle_clock_deadline(int level) const;
++    void skip_idle_clock_edges(unsigned edges,int level);
+ 	void write_rxd(int state);
+ 	void write_cts(int state);
+ 	void write_dsr(int state);
+@@ -93,6 +98,7 @@
+ 	};
+ 
+ private:
++	std::function<void(bool)> m_idle_clock_notify;
+ 	devcb_write_line m_txd_handler;
+ 	devcb_write_line m_dtr_handler;
+ 	devcb_write_line m_rts_handler;
+--- a/src/devices/machine/i8251.cpp
++++ b/src/devices/machine/i8251.cpp
+@@ -502,6 +502,7 @@
+ 
+ void i8251_device::device_reset()
+ {
++    if(m_idle_clock_notify)m_idle_clock_notify(false);
+ 	LOG("I8251: Reset\n");
+ 
+ 	/* what is the default setup when the 8251 has been reset??? */
+@@ -536,6 +537,8 @@
+ 	update_rx_ready();
+ 	/* update tx ready pin output */
+ 	update_tx_ready();
++
++    if(m_idle_clock_notify)m_idle_clock_notify(true);
+ }
+ 
+ 
+@@ -748,6 +751,7 @@
+ 
+ void i8251_device::control_w(uint8_t data)
+ {
++    if(m_idle_clock_notify)m_idle_clock_notify(false);
+ 	if (m_flags == I8251_NEXT_SYNC1)
+ 		sync1_w(data);
+ 	else if (m_flags == I8251_NEXT_SYNC2)
+@@ -756,6 +760,8 @@
+ 		mode_w(data);
+ 	else
+ 		command_w(data);
++
++    if(m_idle_clock_notify)m_idle_clock_notify(true);
+ }
+ 
+ 
+@@ -766,6 +772,7 @@
+ 
+ uint8_t i8251_device::status_r()
+ {
++    if(m_idle_clock_notify)m_idle_clock_notify(false);
+ 	uint8_t status = (m_dsr << 7) | m_status;
+ 
+ 	LOG("status: %02x\n", status);
+@@ -784,6 +791,7 @@
+ 
+ void i8251_device::data_w(uint8_t data)
+ {
++    if(m_idle_clock_notify)m_idle_clock_notify(false);
+ 	m_tx_data = data;
+ 
+ 	LOG("data_w %02x\n", data);
+@@ -800,6 +808,8 @@
+ 	/* if transmitter is active, then tx empty will be signalled */
+ 	update_tx_ready();
+ 	update_tx_empty();
++
++    if(m_idle_clock_notify)m_idle_clock_notify(true);
+ }
+ 
+ 
+@@ -838,6 +848,7 @@
+ 
+ uint8_t i8251_device::data_r()
+ {
++    if(m_idle_clock_notify)m_idle_clock_notify(false);
+ 	LOG("read data: %02x, STATUS=%02x\n",m_rx_data,m_status);
+ 	/* reading clears */
+ 	if (!machine().side_effects_disabled())
+@@ -869,13 +880,17 @@
+ 
+ void i8251_device::write_rxd(int state)
+ {
++    const bool changed=m_rxd!=(state?1:0);
++    if(changed&&m_idle_clock_notify)m_idle_clock_notify(false);
+ 	m_rxd = state ? 1 : 0;
++    if(changed&&m_idle_clock_notify)m_idle_clock_notify(true);
+ 	LOGBITS("8251: Presented a %d\n", m_rxd);
+ 	//device_serial_interface::rx_w(m_rxd);
+ }
+ 
+ void i8251_device::write_cts(int state)
+ {
++    if(m_idle_clock_notify)m_idle_clock_notify(false);
+ 	m_cts = state ? 1 : 0;
+ 
+ 	if (started())
+@@ -884,6 +899,8 @@
+ 		update_tx_ready();
+ 		update_tx_empty();
+ 	}
++
++    if(m_idle_clock_notify)m_idle_clock_notify(true);
+ }
+ 
+ void i8251_device::write_dsr(int state)
+@@ -995,3 +1012,39 @@
+ 	case 3: simk_w(data); break;
+ 	}
+ }
++
++unsigned i8251_device::idle_clock_deadline(int level) const
++{
++    // Fast path is limited to the observed asynchronous x16 configuration.
++    // Sync, setup, x1/x64 and incoherent pin states retain every raw edge.
++    if(m_flags!=I8251_NEXT_COMMAND || m_sync_byte_count || m_br_factor!=16 ||
++            m_txc!=level || m_rxc!=level || m_txc_count<0 || m_txc_count>=16)
++        return 1;
++    unsigned next=2u*unsigned(16-m_txc_count)-unsigned(level);
++    if(BIT(m_command,2)) {
++        if(is_receive_register_synchronized()) {
++            if(m_rxc_count<=0)return 1;
++            next=std::min(next,2u*unsigned(m_rxc_count)-1u+unsigned(level));
++        } else if(!m_rxd)next=std::min(next,1u+unsigned(level));
++    }
++    return next;
++}
++
++void i8251_device::skip_idle_clock_edges(unsigned edges,int level)
++{
++    if(!edges)return;
++    assert(edges<idle_clock_deadline(level));
++    const unsigned rising=(edges+unsigned(!level))/2;
++    const unsigned falling=(edges+unsigned(level))/2;
++    m_txc_count+=falling;
++    if(BIT(m_command,2)) {
++        if(is_receive_register_synchronized())m_rxc_count-=rising;
++        else {
++            // Idle mark pulses still shift the actual native receive register.
++            // After sixteen identical bits additional shifts are idempotent.
++            assert(m_rxd || !rising);
++            for(unsigned n=0;n<std::min(rising,16u);++n)receive_register_update_bit(1);
++        }
++    }
++    m_txc=m_rxc=level^(edges&1);
++}
+--- a/src/mame/shared/segam1audio.h
++++ b/src/mame/shared/segam1audio.h
+@@ -34,6 +34,10 @@
+ 
+ 	void write_txd(int state);
+ 	void uart_clock_w(int state);
++    void set_uart_clock_notifier(std::function<void(bool)> notify) { m_uart->set_idle_clock_notifier(std::move(notify)); }
++    unsigned uart_clock_deadline(int level) const { return m_uart->idle_clock_deadline(level); }
++    void skip_uart_clock_edges(unsigned edges,int level) { m_uart->skip_idle_clock_edges(edges,level); }
++
+ 
+ 	void mpcm1_map(address_map &map) ATTR_COLD;
+ 	void mpcm2_map(address_map &map) ATTR_COLD;
+--- a/src/mame/sega/model2.h
++++ b/src/mame/sega/model2.h
+@@ -403,6 +403,13 @@
+ 	void vcop_uart_clock_w(int state);
+ 	void restore_vcop_uart_clock();
+ 	bool m_shared_uart_clock=false;
++    bool m_coalesced_uart_clock=false,m_uart_clock_busy=false;
++    u64 m_uart_clock_edge=0,m_uart_clock_next=0;
++    emu_timer *m_uart_clock_timer=nullptr;
++    TIMER_CALLBACK_MEMBER(vcop_uart_clock_tick);
++    void vcop_uart_clock_notify(bool changed);
++    void vcop_uart_clock_presave();
++    void schedule_vcop_uart_clock();
+ 	void daytona_output_w(u8 data);
+ 	void desert_output_w(u8 data);
+ 	void vcop_output_w(u8 data);
+--- a/src/mame/sega/model2.cpp
++++ b/src/mame/sega/model2.cpp
+@@ -2740,6 +2740,11 @@
+         auto& duplicate=*subdevice<clock_device>("uart_clock");
+         duplicate.set_clock(0);duplicate.set_period(attotime::never);
+         m_shared_uart_clock=true;
++        // Diagnostic opt-in until native state/audio equivalence is established.
++        if(std::getenv("VCOP_COALESCED_UART")) {
++            edge.set_clock(0);edge.set_period(attotime::never);
++            m_coalesced_uart_clock=true;
++        }
+     }
+ 
+ 
+@@ -7783,6 +7788,14 @@
+     model2_tgp_state::machine_start();
+     if(m_shared_uart_clock)
+         machine().save().register_postload(save_prepost_delegate(FUNC(model2o_state::restore_vcop_uart_clock),this));
++    if(m_coalesced_uart_clock) {
++        m_uart_clock_timer=timer_alloc(FUNC(model2o_state::vcop_uart_clock_tick),this);
++        save_item(NAME(m_uart_clock_edge));save_item(NAME(m_uart_clock_next));
++        machine().save().register_presave(save_prepost_delegate(FUNC(model2o_state::vcop_uart_clock_presave),this));
++        auto notify=[this](bool changed){vcop_uart_clock_notify(changed);};
++        m_uart->set_idle_clock_notifier(notify);m_m1audio->set_uart_clock_notifier(notify);
++        schedule_vcop_uart_clock();
++    }
+ }
+ 
+ void model2o_state::restore_vcop_uart_clock()
+@@ -7791,6 +7804,11 @@
+     // device layout while ensuring only the shared edge source runs.
+     auto& duplicate=*subdevice<clock_device>("uart_clock");
+     duplicate.set_unscaled_clock(0);duplicate.set_period(attotime::never);
++    if(m_coalesced_uart_clock) {
++        auto& first=*subdevice<clock_device>("m1audio:uart_clock");
++        first.set_unscaled_clock(0);first.set_period(attotime::never);
++        m_uart_clock_busy=false;
++    }
+ }
+ 
+ void model2o_state::vcop_uart_clock_w(int state)
+@@ -7799,3 +7817,42 @@
+     m_uart->write_txc(state);
+     m_uart->write_rxc(state);
+ }
++
++void model2o_state::schedule_vcop_uart_clock()
++{
++    const int level=m_uart_clock_edge&1;
++    const u64 next=m_uart_clock_edge+std::min(m_uart->idle_clock_deadline(level),m_m1audio->uart_clock_deadline(level));
++    if(next==m_uart_clock_next)return;
++    m_uart_clock_next=next;
++    m_uart_clock_timer->adjust(attotime::from_ticks(next,1000000)-machine().time());
++}
++
++void model2o_state::vcop_uart_clock_notify(bool changed)
++{
++    if(m_uart_clock_busy || !m_uart_clock_timer)return;
++    if(changed) { schedule_vcop_uart_clock();return; }
++    const u64 until=std::min(machine().time().as_ticks(1000000),m_uart_clock_next-1);
++    if(until<=m_uart_clock_edge)return;
++    const unsigned edges=until-m_uart_clock_edge;
++    const int level=m_uart_clock_edge&1;
++    m_m1audio->skip_uart_clock_edges(edges,level);m_uart->skip_idle_clock_edges(edges,level);
++    m_uart_clock_edge=until;
++}
++
++void model2o_state::vcop_uart_clock_presave()
++{
++    vcop_uart_clock_notify(false);
++}
++
++TIMER_CALLBACK_MEMBER(model2o_state::vcop_uart_clock_tick)
++{
++    m_uart_clock_busy=true;
++    const u64 event=m_uart_clock_next;
++    const unsigned skipped=event-m_uart_clock_edge-1;
++    const int previous=m_uart_clock_edge&1;
++    m_m1audio->skip_uart_clock_edges(skipped,previous);m_uart->skip_idle_clock_edges(skipped,previous);
++    m_uart_clock_edge=event;
++    vcop_uart_clock_w(event&1);
++    m_uart_clock_busy=false;
++    schedule_vcop_uart_clock();
++}

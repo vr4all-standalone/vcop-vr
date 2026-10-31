@@ -1,0 +1,11 @@
+--- a/src/devices/machine/i8251.cpp
++++ b/src/devices/machine/i8251.cpp
+@@ -1058,7 +1058,7 @@
+ 
+ bool i8251_device::clock_is_idle(int level) const
+ {
+-    return idle_clock_deadline(level)>1 && !m_delayed_tx_en && !BIT(m_command,3) &&
++    return idle_clock_deadline(level)>1 && !BIT(m_command,3) &&
+         is_tx_enabled() && BIT(m_command,2) &&
+         (m_status&(I8251_STATUS_TX_READY|I8251_STATUS_TX_EMPTY|I8251_STATUS_RX_READY))==
+             (I8251_STATUS_TX_READY|I8251_STATUS_TX_EMPTY) &&

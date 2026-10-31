@@ -1,0 +1,16 @@
+--- a/src/mame/sega/model2_v.cpp
++++ b/src/mame/sega/model2_v.cpp
+@@ -682,6 +682,13 @@
+     if (std::string_view(machine().system().name) == "vcop") {
+         vcop::trace_begin(m_screen->frame_number(), machine().time().as_double());
+         vcop::live_begin(m_screen->frame_number(), machine().time().as_double());
++        // Sample original camera animation with its submitted geometry, before
++        // vblank can advance the native camera for the following frame.
++        if(vcop::trace_active() || vcop::live_active()) {
++            const auto zoom=vcop::read_native_camera_zoom([&](uint32_t address){return m_maincpu->space(AS_PROGRAM).read_dword(address);});
++            if(vcop::trace_active())vcop::trace_capture().camera_zoom(zoom.fov,zoom.reference_fov);
++            if(vcop::live_active())vcop::live_capture().camera_zoom(zoom.fov,zoom.reference_fov);
++        }
+     }
+ 	raster_state *raster = m_raster.get();
+ 

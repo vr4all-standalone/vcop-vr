@@ -1,0 +1,11 @@
+--- a/src/mame/sega/model2.cpp
++++ b/src/mame/sega/model2.cpp
+@@ -2487,7 +2487,7 @@
+ {
+ 	// sound interrupt is asserted if either RxRDY or TxRDY is active
+ 	const u32 line = 1 << 10;
+-	if ((m_uart->txrdy_r() || m_uart->rxrdy_r()) && (m_intena & line))
++	if (!(m_intreq & line) && (m_uart->txrdy_r() || m_uart->rxrdy_r()) && (m_intena & line))
+ 	{
+ 		m_intreq |= line;
+ 		irq_update();

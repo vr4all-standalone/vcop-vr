@@ -5,7 +5,7 @@
 # Virtua Cop VR
 ### Sega Model 2 Arcade Light-Gun Action · Standalone Meta Quest & PC VR
 
-[![Release v0.1.7](https://img.shields.io/badge/Release-v0.1.7-brightgreen?style=for-the-badge)](https://github.com/vr4all-standalone/vcop-vr/releases/latest)
+[![Release v0.1.9](https://img.shields.io/badge/Release-v0.1.9-brightgreen?style=for-the-badge)](https://github.com/vr4all-standalone/vcop-vr/releases/latest)
 [![Quest and PC VR](https://img.shields.io/badge/Headset-Quest_3_%2F_3S_%C2%B7_PC_VR_OpenXR-blue?style=for-the-badge)](#installation-meta-quest)
 [![Original arcade game required](https://img.shields.io/badge/Your_Game-vcop%20Revision%20B%20%2B%20I%2FO%20firmware-orange?style=for-the-badge)](#your-game-files)
 
@@ -13,15 +13,16 @@
 
 [Checksums](https://github.com/vr4all-standalone/vcop-vr/releases/latest/download/SHA256SUMS.txt) · [Complete source](https://github.com/vr4all-standalone/vcop-vr/releases/latest/download/vcop-vr-source.zip) · [All releases](https://github.com/vr4all-standalone/vcop-vr/releases)
 
-**[🌐 VR4ALL — Standalone VR Mod Installer](https://github.com/vr4all-standalone/vr4all-standalone)**
-
-[☕ Donate to VR4ALL](https://ko-fi.com/vr4all)
+**[🌐 VR4ALL — Standalone VR Mod Installer](https://github.com/vr4all-standalone/vr4all-standalone)**  
+**[☕ Donate to VR4ALL](https://ko-fi.com/vr4all)**
 
 </div>
 
 ---
 
-## Update v0.1.7
+## Update v0.1.9
+
+- Defaults and Reset now match the captured Quest profile: Arcade, Laser On, Shoot off-screen reload, and Custom reticle 20% minimum / 35% maximum / 7.0 m shrink. Existing valid preferences are preserved.
 
 - Shared wide VR4ALL setup panel, with validated automatic entry and manual Play.
 - Full player-colored Arcade body and grip, with original grey screws and lens details. P1 red / P2 blue follow player identity across hand swaps.
@@ -29,7 +30,7 @@
 
 ## Overview
 
-Experimental port of original arcade Virtua Cop Revision B for Quest 3/3S and Windows OpenXR. Version 0.1.6, Android code7/package `com.vrlightgunhub.vcop`. This experimental VR port is available as Quest, PCVR and complete-source downloads.
+Experimental port of original arcade Virtua Cop Revision B for Quest 3/3S and Windows OpenXR. Version 0.1.9, Android code 10/package `com.vrlightgunhub.vcop`. This experimental VR port is available as Quest, PCVR and complete-source downloads.
 
 This uses native Model 2 geometry, materials, HUD, sound, game logic and pacing. Each eye renders signed camera-space geometry with head rotation and lean. VC1's native cloud polygons render infinitely far away with their own transparency; original hearts, ammo cylinders and score graphics remain native HUD elements. In-game gun follows each player's native equipment. Its standard model is the original scene pistol and hand used cosmetically; Arcade and Zapper are the other two choices.
 

@@ -1,0 +1,63 @@
+--- a/src/devices/cpu/i960/i960.cpp
++++ b/src/devices/cpu/i960/i960.cpp
+@@ -2,6 +2,7 @@
+ // copyright-holders:Farfetch'd, R. Belmont
+ #include "emu.h"
+ #include "vcop/native_timing.h"
++#include "vcop/i960_idle.h"
+ #include "i960.h"
+ #include "i960dis.h"
+ 
+@@ -2214,6 +2215,11 @@
+ 		check_immediate_irqs();
+ 
+ 	while(m_icount > 0) {
++        if(vcop::fold_idle_poll(m_vcop_idle_poll,debugger_enabled(),m_stall_state.burst_mode,m_IP,m_PIP,m_r,m_AC,m_icount,
++                [this](uint32_t address){return i960_read_dword_unaligned(address);})) {
++            m_stalled=false;
++            continue;
++        }
+ 		m_PIP = m_IP;
+ 		debugger_instruction_hook(m_IP);
+ 
+--- a/src/devices/cpu/i960/i960.h
++++ b/src/devices/cpu/i960/i960.h
+@@ -68,6 +68,8 @@
+ public:
+ 	static constexpr uint16_t BURST = 0x0001;
+ 
++	void set_vcop_idle_poll(bool enabled) { m_vcop_idle_poll=enabled; }
++
+ 	void i960_stall()
+ 	{
+ 		m_stalled = true;
+@@ -108,6 +110,7 @@
+ 		bool iswriteop = false;
+ 	}m_stall_state;
+ 	bool m_stalled;
++	bool m_vcop_idle_poll=false;
+ 
+ 	address_space_config m_program_config;
+ 
+--- a/src/mame/sega/model2.cpp
++++ b/src/mame/sega/model2.cpp
+@@ -71,6 +71,7 @@
+ 
+ #include "emu.h"
+ #include "model2.h"
++#include "vcop/i960_idle.h"
+ #include "../../lib/vcop/host_bridge.h"
+ 
+ #include "315_5296.h"
+@@ -159,6 +160,11 @@
+ 
+ void model2_state::machine_start()
+ {
++    // VC1's verified polling loop has no read side effects. Keep exact native
++    // cycle/register accounting while folding only whole in-slice iterations.
++    if(std::string_view(machine().system().name)=="vcop")
++        m_maincpu->set_vcop_idle_poll(!std::getenv("VCOP_LEGACY_IDLE_POLL") &&
++            vcop::idle_poll_revision_matches([this](uint32_t a){return m_maincpu->space(AS_PROGRAM).read_dword(a);}));
+     if(vcop::camera_hooks_requested() && std::string_view(machine().system().name)=="vcop") {
+         auto& space=m_maincpu->space(AS_PROGRAM);
+         space.install_write_tap(0x50f404,0x50f407,"vcop_vr_camera_focus",
